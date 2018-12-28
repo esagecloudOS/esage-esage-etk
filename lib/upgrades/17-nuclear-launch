@@ -1,0 +1,37 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'fileutils'
+require 'logger'
+
+log = Logger.new '/var/log/17-nuclear-launch.log'
+
+if not File.directory?('/opt/abiquo/backup/1.6.8')
+  log.error '/opt/abiquo/backup/1.6.8 directory not found.Aborting upgrade.'
+  exit 1
+end
+
+`mkdir -p /opt/abiquo/backup/1.6.8/database/`
+log.info "Dumping current database schema..."
+output = `/usr/bin/mysqldump -R -u root kinton > /opt/abiquo/backup/1.6.8/database/kinton-#{Time.now.strftime('%F_%H%M')}.sql 2>&1`
+if $? != 0
+  log.error "MySQL backup failed: #{output}"
+end
+
+log.info "Applying upgrade deltas (kinton-delta-1_6_8-to-1_7_0)..."
+output = `/usr/bin/mysql -u root kinton 2>&1 < /usr/share/doc/abiquo-server/database/kinton-delta-1_6_8-to-1_7_0.sql`
+if $? != 0
+  log.error "Upgrading database schema failed: #{output}"
+  log.error "Aborting the upgrade."
+  exit 1
+end
+
+log.info "Applying upgrade deltas (kinton-premium-delta-1_6_8-to-1_7_0)..."
+output = `/usr/bin/mysql -u root kinton 2>&1 < /usr/share/doc/abiquo-server/database/kinton-premium-delta-1.6.8-to-1.7.0.sql`
+if $? != 0
+  log.error "Upgrading database schema failed: #{output}"
+  log.error "Aborting the upgrade."
+  exit 1
+end
+log.info "Done!"
+
+FileUtils.rm '/opt/abiquo/config/.needsupgrade'

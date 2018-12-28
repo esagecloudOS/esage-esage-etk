@@ -1,0 +1,96 @@
+#!/usr/bin/env ruby
+begin
+  require 'lib/abiquo-etk'
+rescue LoadError => e
+  require 'abiquo-etk'
+end
+
+class String
+  include Term::ANSIColor
+end
+
+include AETK::OutputFormatters
+
+
+TOMCAT_SERVER_CONFIG='/opt/abiquo/tomcat/conf/Catalina/localhost/server.xml'
+TOMCAT_SERVER_BUILTIN_CONFIG='/opt/abiquo/tomcat/webapps/server/META-INF/context.xml'
+TOMCAT_API_CONFIG='/opt/abiquo/tomcat/conf/Catalina/localhost/api.xml'
+TOMCAT_API_BUILTIN_CONFIG='/opt/abiquo/tomcat/webapps/api/META-INF/context.xml'
+TOMCAT_BPMASYNC_CONFIG ='/opt/abiquo/tomcat/conf/Catalina/localhost/bpm-async.xml'
+TOMCAT_BPMASYNC_BUILTIN_CONFIG = '/opt/abiquo/tomcat/webapps/bpm-async/META-INF/context.xml'
+
+def config_set_node(file, path, val, write_changes = false)
+  doc = Nokogiri::XML(File.new(file))
+	doc.root.xpath(path).first.content = (val || '')
+  if write_changes
+    File.open(file, 'w') do |f|
+      f.puts doc.to_xml
+    end
+  end
+  return doc
+end
+
+def config_get_node(cf, path)
+	cf.root.xpath(path).first.text rescue nil
+end
+
+def config_set_attribute(file, path, attrname, val, write_changes = false)
+  if not File.exist?(file)
+    AETK::Log.instance.error "config_set_attribute: file #{file} not found."
+  end
+
+  doc = Nokogiri::XML(File.new(file))
+	doc.root.xpath(path).first[attrname] = (val||'')
+  if write_changes
+    File.open(file, 'w') do |f|
+      f.puts doc.to_xml
+    end
+  end
+
+  return doc
+end
+
+def config_get_attribute(cf, path, attrname)
+	cf.root.xpath(path).first[attrname] rescue nil
+end
+
+def help
+  path = File.dirname(__FILE__) + '/../lib/abicli/commands/*.rb'
+  commands = Dir[path]
+  commands.map! { |cmd| File.basename(cmd,'.rb') }
+  puts "\n#{'ABICLI Usage'.bold}\n\n"
+  puts "Available commands:\n\n"
+
+  commands.sort.each { |cmd| puts "  #{cmd}\n" }
+  puts ""
+end
+
+op = ARGV[0]
+if op.nil?
+  help
+  exit
+end
+
+if op == 'setattr'
+  comp = ARGV[1]
+  path = ARGV[2]
+  attrname = ARGV[3]
+  val = ARGV[4]
+  file = File.join(ABIQUO_BASE_DIR, "config/#{comp}.xml")
+  if File.exist? comp
+	  file = comp
+  end
+  config_set_attribute(file, path, attrname, val)
+elsif op == 'help'
+  help
+else
+  path = File.dirname(__FILE__) + '/../lib/abicli/commands/*.rb'
+  commands = Dir[path]
+  if not commands.include? File.dirname(__FILE__) + "/../lib/abicli/commands/#{op}.rb"
+    help
+  else
+    commands.each do |cmd|
+      load cmd
+    end
+  end
+end
